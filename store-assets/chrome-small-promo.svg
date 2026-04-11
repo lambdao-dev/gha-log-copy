@@ -1,0 +1,19 @@
+<svg width="440" height="280" viewBox="0 0 440 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="promo-bg" x1="44" y1="24" x2="390" y2="252" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="promo-accent" x1="68" y1="40" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="440" height="280" rx="28" fill="url(#promo-bg)"/>
+  <rect x="26" y="26" width="388" height="228" rx="22" stroke="#334155"/>
+  <rect x="48" y="50" width="124" height="124" rx="32" fill="url(#promo-accent)"/>
+  <path d="M130 76H90C85.5817 76 82 79.5817 82 84V100H66C61.5817 100 58 103.582 58 108V148C58 152.418 61.5817 156 66 156H106C110.418 156 114 152.418 114 148V132H130C134.418 132 138 128.418 138 124V84C138 79.5817 134.418 76 130 76ZM102 144H70V112H102V144ZM126 120H114V108C114 103.582 110.418 100 106 100H94V88H126V120Z" fill="white"/>
+  <text x="198" y="104" fill="#F8FAFC" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="700">GitHub Actions</text>
+  <text x="198" y="140" fill="#F8FAFC" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="700">Log Copy</text>
+  <text x="198" y="188" fill="#94A3B8" font-family="Inter, system-ui, sans-serif" font-size="16">Copy step logs with one click</text>
+</svg>

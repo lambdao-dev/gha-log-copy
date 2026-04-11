@@ -1,0 +1,17 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <filter id="shadow" x="18" y="18" width="92" height="92" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#082F49" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)"/>
+  <rect x="8.5" y="8.5" width="111" height="111" rx="27.5" stroke="#E0F2FE" stroke-opacity="0.18"/>
+  <g filter="url(#shadow)">
+    <path d="M84 32H48C43.5817 32 40 35.5817 40 40V52H28C23.5817 52 20 55.5817 20 60V88C20 92.4183 23.5817 96 28 96H64C68.4183 96 72 92.4183 72 88V76H84C88.4183 76 92 72.4183 92 68V40C92 35.5817 88.4183 32 84 32Z" fill="#F8FAFC" fill-opacity="0.18"/>
+    <path d="M83.9999 36H47.9999C45.7908 36 43.9999 37.7909 43.9999 40V56H27.9999C25.7908 56 23.9999 57.7909 23.9999 60V88C23.9999 90.2091 25.7908 92 27.9999 92H63.9999C66.2091 92 67.9999 90.2091 67.9999 88V72H83.9999C86.2091 72 87.9999 70.2091 87.9999 68V40C87.9999 37.7909 86.2091 36 83.9999 36ZM59.9999 84H31.9999V64H59.9999V84ZM79.9999 64H67.9999V60C67.9999 55.5817 64.4182 52 59.9999 52H51.9999V44H79.9999V64Z" fill="white"/>
+  </g>
+</svg>
