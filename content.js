@@ -2,13 +2,13 @@ const STEP_SELECTOR = "check-step[data-log-url]";
 const HEADER_SELECTOR = 'summary.CheckStep-header[data-target="check-step.header"]';
 const HEADER_ROW_SELECTOR = ".d-flex.flex-items-center";
 const DURATION_SELECTOR = ".text-mono.text-normal.text-small.float-right";
-const LOG_CONTAINER_SELECTOR = ".js-checks-log-display-container";
 const LOG_ERROR_SELECTOR = ".js-checks-log-display-error:not([hidden])";
 const LOG_LINE_SELECTOR = ".js-check-step-line";
 const LOG_CONTENT_SELECTOR = ".js-check-line-content";
 const BUTTON_SELECTOR = "[data-gha-copy-button]";
 const COPY_BUTTON_LABEL = "Copy step log";
 const COPY_RESET_DELAY_MS = 1800;
+const FETCH_TIMEOUT_MS = 60000;
 const JOB_ROUTE_RE = /^\/[^/]+\/[^/]+\/actions\/runs\/[^/]+\/job\/[^/]+\/?$/;
 
 const COPY_ICON_SVG =
@@ -20,6 +20,25 @@ const resetTimers = new WeakMap();
 
 function isJobLogPage() {
   return JOB_ROUTE_RE.test(window.location.pathname);
+}
+
+function isAllowedLogResponseUrl(value) {
+  if (!value) {
+    return true;
+  }
+
+  let url;
+  try {
+    url = new URL(value, window.location.origin);
+  } catch {
+    return false;
+  }
+
+  return url.protocol === "https:" &&
+    (url.hostname === "github.com" ||
+      url.hostname.endsWith(".githubusercontent.com") ||
+      url.hostname.endsWith(".actions.githubusercontent.com") ||
+      url.hostname.endsWith(".blob.core.windows.net"));
 }
 
 function createCopyButton() {
@@ -121,6 +140,8 @@ async function handleCopyButtonClick(event) {
   }
 
   setButtonState(button, "loading");
+  window.clearTimeout(resetTimers.get(button));
+  resetTimers.delete(button);
 
   try {
     await ensureStepExpanded(step);
@@ -132,12 +153,16 @@ async function handleCopyButtonClick(event) {
 
     await navigator.clipboard.writeText(logText);
     setButtonState(button, "success");
+    scheduleButtonReset(button);
   } catch (error) {
     console.error("GHA Step Copy: failed to copy step log", error);
     setButtonState(button, "error");
+    // Keep the explanation available until the user retries. Never report a
+    // successful copy of the virtualized DOM when fetching the log failed.
+    const message = "Could not copy the fetched step log. Clipboard unchanged. Retry or use GitHub's Download log archive.";
+    button.title = message;
+    button.setAttribute("aria-label", message);
   }
-
-  scheduleButtonReset(button);
 }
 
 function isStepExpanded(step) {
@@ -164,46 +189,59 @@ function hasRenderedStepContent(step) {
 }
 
 async function getStepLogText(step) {
-  try {
-    const fetchedText = await fetchStepLogText(step);
-    if (fetchedText) {
-      return fetchedText;
-    }
-  } catch (error) {
-    console.warn("GHA Step Copy: step log fetch failed, falling back to rendered DOM", error);
-  }
-
-  return readRenderedStepLogText(step);
+  return fetchStepLogText(step);
 }
 
 async function fetchStepLogText(step) {
   const relativeLogUrl = step.getAttribute("data-log-url");
   if (!relativeLogUrl) {
-    return "";
+    throw new Error("GitHub has not provided a step log URL");
   }
 
-  const response = await fetch(new URL(relativeLogUrl, window.location.origin), {
-    credentials: "include",
-    headers: {
-      Accept: "text/html, text/plain;q=0.9, */*;q=0.8"
+  const logUrl = new URL(relativeLogUrl, window.location.origin);
+  if (logUrl.origin !== window.location.origin || logUrl.username || logUrl.password) {
+    throw new Error("Refusing a step log URL outside GitHub");
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(logUrl, {
+      credentials: "same-origin",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        Accept: "text/html, text/plain;q=0.9"
+      }
+    });
+
+    if (!response.ok || response.status === 206) {
+      throw new Error(`GitHub step log fetch returned ${response.status}`);
     }
-  });
 
-  if (!response.ok) {
-    throw new Error(`GitHub step log fetch returned ${response.status}`);
+    if (!isAllowedLogResponseUrl(response.url)) {
+      throw new Error(`GitHub redirected the step log to an unexpected host: ${response.url || "unknown"}`);
+    }
+
+    const responseText = await response.text();
+    return extractFetchedLogText(responseText, response.headers.get("Content-Type"));
+  } finally {
+    window.clearTimeout(timeout);
   }
-
-  const responseText = await response.text();
-  return extractFetchedLogText(responseText);
 }
 
-function extractFetchedLogText(markup) {
+function extractFetchedLogText(markup, contentType) {
   if (!markup) {
     return "";
   }
 
-  if (!markup.includes("<")) {
+  const mediaType = (contentType || "").split(";", 1)[0].trim().toLowerCase();
+  if (mediaType === "text/plain") {
     return normalizeCopiedText(markup);
+  }
+
+  if (mediaType !== "text/html") {
+    throw new Error(`Unsupported GitHub step log content type: ${mediaType || "missing"}`);
   }
 
   const parsed = new DOMParser().parseFromString(markup, "text/html");
@@ -212,16 +250,7 @@ function extractFetchedLogText(markup) {
     return collectedLines;
   }
 
-  return "";
-}
-
-function readRenderedStepLogText(step) {
-  const container = step.querySelector(LOG_CONTAINER_SELECTOR);
-  if (!container) {
-    return "";
-  }
-
-  return collectLogLines(container);
+  throw new Error("GitHub returned HTML without recognizable step log lines");
 }
 
 function collectLogLines(root) {
