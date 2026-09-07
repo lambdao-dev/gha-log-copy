@@ -7,12 +7,15 @@ const LOG_LINE_SELECTOR = ".js-check-step-line";
 const LOG_CONTENT_SELECTOR = ".js-check-line-content";
 const BUTTON_SELECTOR = "[data-gha-copy-button]";
 const COPY_BUTTON_LABEL = "Copy step log";
+const COPY_ERRORS_LABEL = "Copy error lines";
 const COPY_RESET_DELAY_MS = 1800;
 const FETCH_TIMEOUT_MS = 60000;
 const JOB_ROUTE_RE = /^\/[^/]+\/[^/]+\/actions\/runs\/[^/]+\/job\/[^/]+\/?$/;
 
 const COPY_ICON_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></svg>';
+const WARNING_ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/><path d="M128,104a8,8,0,0,0-8,8v40a8,8,0,0,0,16,0V112A8,8,0,0,0,128,104Zm0,64a8,8,0,1,0,8,8A8,8,0,0,0,128,168Z"/></svg>';
 
 let scanTimer = 0;
 let mutationObserver;
@@ -41,20 +44,21 @@ function isAllowedLogResponseUrl(value) {
       url.hostname.endsWith(".blob.core.windows.net"));
 }
 
-function createCopyButton() {
+function createCopyButton(mode = "all") {
   const button = document.createElement("button");
   const label = document.createElement("span");
 
   button.type = "button";
-  button.className = "gha-copy-step-button";
-  button.dataset.ghaCopyButton = "true";
+  button.className = mode === "errors" ? "gha-copy-step-button gha-copy-errors-button" : "gha-copy-step-button";
+  button.dataset.ghaCopyButton = mode;
   button.dataset.state = "idle";
-  button.title = COPY_BUTTON_LABEL;
-  button.setAttribute("aria-label", COPY_BUTTON_LABEL);
-  button.innerHTML = COPY_ICON_SVG;
+  const labelText = mode === "errors" ? COPY_ERRORS_LABEL : COPY_BUTTON_LABEL;
+  button.title = labelText;
+  button.setAttribute("aria-label", labelText);
+  button.innerHTML = mode === "errors" ? WARNING_ICON_SVG : COPY_ICON_SVG;
 
   label.className = "gha-copy-step-button-label";
-  label.textContent = COPY_BUTTON_LABEL;
+  label.textContent = labelText;
   button.append(label);
   button.addEventListener("click", handleCopyButtonClick);
 
@@ -68,7 +72,7 @@ function scanAndInject() {
 
   for (const step of document.querySelectorAll(STEP_SELECTOR)) {
     const header = step.querySelector(HEADER_SELECTOR);
-    if (!header || header.querySelector(BUTTON_SELECTOR)) {
+    if (!header || header.querySelector('[data-gha-copy-button="all"]')) {
       continue;
     }
 
@@ -77,13 +81,16 @@ function scanAndInject() {
       continue;
     }
 
-    const button = createCopyButton();
+    const button = createCopyButton("all");
+    const errorsButton = createCopyButton("errors");
     const duration = headerRow.querySelector(DURATION_SELECTOR);
 
     if (duration) {
       duration.before(button);
+      duration.before(errorsButton);
     } else {
       headerRow.append(button);
+      headerRow.append(errorsButton);
     }
   }
 }
@@ -98,8 +105,9 @@ function setButtonState(button, state) {
   button.disabled = state === "loading";
 
   if (state === "idle") {
-    button.title = COPY_BUTTON_LABEL;
-    button.setAttribute("aria-label", COPY_BUTTON_LABEL);
+    const label = button.dataset.ghaCopyButton === "errors" ? COPY_ERRORS_LABEL : COPY_BUTTON_LABEL;
+    button.title = label;
+    button.setAttribute("aria-label", label);
     return;
   }
 
@@ -146,7 +154,10 @@ async function handleCopyButtonClick(event) {
   try {
     await ensureStepExpanded(step);
 
-    const logText = await getStepLogText(step);
+    let logText = await getStepLogText(step);
+    if (button.dataset.ghaCopyButton === "errors") {
+      logText = filterErrorLines(logText);
+    }
     if (!logText) {
       throw new Error("No log lines found for step");
     }
@@ -287,6 +298,21 @@ function readLogLineText(node) {
 
 function normalizeCopiedText(text) {
   return normalizeLineText(text).replace(/^\n+|\n+$/g, "");
+}
+
+function filterErrorLines(text) {
+  const lines = text.split("\n").filter(isErrorLine);
+  if (!lines.length) {
+    throw new Error("No error lines found in step log");
+  }
+  return lines.join("\n");
+}
+
+function isErrorLine(line) {
+  const trimmed = line.trim();
+  return /^##\[(?:error|failure)\]/i.test(trimmed) ||
+    /^(?:error|fatal|critical)\s*[:[]/i.test(trimmed) ||
+    /\b(?:error|fatal|critical|exception|traceback)\b/i.test(trimmed);
 }
 
 function waitFor(predicate, timeoutMs) {
